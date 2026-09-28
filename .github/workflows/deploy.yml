@@ -1,0 +1,91 @@
+# Test, then deploy to the VPS on every push to main (or run it by hand from the Actions tab).
+#
+# Required repository secrets (Settings → Secrets and variables → Actions):
+#   VPS_HOST      server IP or hostname
+#   VPS_USER      SSH user (e.g. root)
+#   VPS_SSH_KEY   private key whose public half is in the server's ~/.ssh/authorized_keys
+#   VPS_PATH      deploy folder on the server (e.g. /root/tenderx-nepal-web)
+#
+# Only the code is copied. Server-only files (.env.prod, Caddyfile, docker-compose.backend-only.yml)
+# are never overwritten, and the database / uploads / certificates live in Docker volumes.
+
+name: Test and deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python -m pytest -q
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check deploy secrets
+        id: secrets
+        env:
+          HAS_SECRETS: ${{ secrets.VPS_HOST != '' && secrets.VPS_SSH_KEY != '' && secrets.VPS_USER != '' && secrets.VPS_PATH != '' }}
+        run: |
+          echo "ready=$HAS_SECRETS" >> "$GITHUB_OUTPUT"
+          if [ "$HAS_SECRETS" != "true" ]; then
+            echo "::notice::Deploy skipped: add VPS_HOST, VPS_USER, VPS_SSH_KEY and VPS_PATH repository secrets to enable it."
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.secrets.outputs.ready == 'true'
+
+      - name: Set up SSH
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload code
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          TARGET: ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${{ secrets.VPS_PATH }}/
+        run: |
+          rsync -az -e "ssh -i ~/.ssh/deploy_key" \
+            --exclude='.git' --exclude='.github' --exclude='.env*' \
+            --exclude='__pycache__' --exclude='.pytest_cache' \
+            ./ "$TARGET"
+
+      - name: Rebuild backend container
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          VPS: ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}
+          VPS_PATH: ${{ secrets.VPS_PATH }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "$VPS" "cd '$VPS_PATH' && \
+            docker compose -f docker-compose.backend-only.yml --env-file .env.prod up -d --build --no-deps backend && \
+            docker image prune -f"
+
+      - name: Health check
+        if: steps.secrets.outputs.ready == 'true'
+        run: |
+          for i in $(seq 1 20); do
+            if curl -fsS https://api.tenderxnepal.com/health; then echo; echo "Deploy is live."; exit 0; fi
+            sleep 6
+          done
+          echo "API did not become healthy in time." >&2
+          exit 1
