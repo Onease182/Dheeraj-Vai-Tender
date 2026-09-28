@@ -63,8 +63,11 @@ def determine_partner_count(field_data: dict) -> int:
     return 1
 
 
-def validate_bid(field_data: dict, *, authorized_signature_present: bool) -> list[str]:
-    """Returns a list of validation error messages (empty = ready to generate)."""
+def validate_bid(field_data: dict, *, authorized_signature_present: bool = True) -> list[str]:
+    """Returns a list of validation error messages (empty = ready to generate).
+
+    The authorised signature is optional: without one the document is generated with the
+    signature slots left blank. The argument is kept so existing callers keep working."""
     errors: list[str] = []
 
     try:
@@ -78,7 +81,5 @@ def validate_bid(field_data: dict, *, authorized_signature_present: bool) -> lis
         errors.append("Employer name is required.")
     if not is_split_valid(field_data):
         errors.append(f"Ownership split must total 100% (currently {percentage_total(field_data)}%).")
-    if not authorized_signature_present:
-        errors.append("Authorized person's signature is required.")
 
     return errors

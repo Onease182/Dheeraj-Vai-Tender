@@ -10,6 +10,9 @@ def with_derived_fields(field_data: dict) -> dict:
     data["HAS_THIRD_PARTNER"] = "True" if data.get("SECOND_PARTNER_NAME") else "False"
     data["AUTHORIZED_CAPACITY"] = "Authorised person of JV"
     data.setdefault("BID_TYPE", "Joint Venture")
+    # master_template_3 uses {{<P>_PARTNER_ADDRESS}} where the other templates (and the form) use {{<P>_ADDRESS}}.
+    for prefix in ("LEAD", "FIRST", "SECOND"):
+        data.setdefault(f"{prefix}_PARTNER_ADDRESS", data.get(f"{prefix}_ADDRESS", ""))
     return data
 
 

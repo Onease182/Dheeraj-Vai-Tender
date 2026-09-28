@@ -23,6 +23,13 @@ logger = logging.getLogger(__name__)
 
 
 class BidDocumentGenerator:
+    # Every signature/stamp image slot the master templates may contain (matched by the image's alt text).
+    IMAGE_SLOT_KEYS = ("AUTHORISED_SIG",) + tuple(
+        f"{prefix}_{suffix}"
+        for prefix in ("LEAD", "FIRST", "SECOND")
+        for suffix in ("CEO_SIG", "STAMP", "PARTNER_MD1", "PARTNER_MD2", "MD1_SIG", "MD2_SIG")
+    )
+
     def __init__(self, templates_dir: Path, output_dir: Path):
         self.templates_dir = Path(templates_dir)
         self.output_dir = Path(output_dir)
@@ -291,13 +298,23 @@ class BidDocumentGenerator:
         placeholders = {f"{{{{{k}}}}}": v for k, v in data.items()}
         self.replace_in_document(doc, placeholders)
 
-        image_mapping = dict(image_mapping or {})
+        image_mapping = {k: v for k, v in (image_mapping or {}).items() if v and os.path.exists(v)}
+        # master_template_3 names MD signature slots "<P>_MD1_SIG" instead of the upload key "<P>_PARTNER_MD1".
+        for prefix in ("LEAD", "FIRST", "SECOND"):
+            for n in ("1", "2"):
+                uploaded = image_mapping.get(f"{prefix}_PARTNER_MD{n}")
+                if uploaded:
+                    image_mapping.setdefault(f"{prefix}_MD{n}_SIG", uploaded)
+
         remove_image_keys = set()
         for prefix in ("LEAD", "FIRST", "SECOND"):
             for suffix in ("PARTNER_MD1", "PARTNER_MD2"):
                 key = f"{prefix}_{suffix}"
                 if self.is_empty_value(data.get(key)):
                     remove_image_keys.add(key)
+        # Signatures/stamps are optional: a slot with no uploaded image is removed rather than
+        # left showing the template's sample picture.
+        remove_image_keys.update(key for key in self.IMAGE_SLOT_KEYS if key not in image_mapping)
         self.replace_images_batch(doc, image_mapping, remove_keys=remove_image_keys)
 
         unresolved = self.unresolved_placeholders(doc)
