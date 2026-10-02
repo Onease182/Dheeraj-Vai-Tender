@@ -45,7 +45,7 @@ def scrape_ppmo(db: Session, max_pages: int = 5) -> int:
         for page in range(1, max_pages + 1):
             params = {"page": page, "size": 20}
             try:
-                resp = httpx.get(PPMO_BASE, params=params, headers=HEADERS, timeout=30)
+                resp = httpx.get(PPMO_BASE, params=params, headers=HEADERS, timeout=30, verify=False)
                 resp.raise_for_status()
             except httpx.HTTPError as e:
                 logger.error("PPMO request failed on page %d: %s", page, e)
