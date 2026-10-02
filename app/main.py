@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from app.core.db import Base, engine
 from app import models  # noqa: F401 — ensures every model is registered on Base.metadata before create_all()
-from app.routers import admin, auth, bid, billing, drafts, generate, meta, pdf, profiles
+from app.routers import admin, auth, bid, billing, drafts, generate, meta, pdf, profiles, tenders
 
 settings = get_settings()
 
@@ -27,6 +27,7 @@ app.include_router(generate.router)
 app.include_router(pdf.router)
 app.include_router(admin.router)
 app.include_router(billing.router)
+app.include_router(tenders.router)
 
 
 @app.on_event("startup")
