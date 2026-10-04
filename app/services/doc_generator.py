@@ -17,6 +17,7 @@ from datetime import datetime
 from pathlib import Path
 
 from docx import Document
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 from lxml import etree
 
 logger = logging.getLogger(__name__)
@@ -283,6 +284,19 @@ class BidDocumentGenerator:
                 process_paragraph(p)
         return replacements
 
+    # Heading styles that should keep their own alignment (centered/left as designed).
+    _SKIP_JUSTIFY_STYLES = {"Heading 1", "Heading 2", "Heading 3", "Heading 4", "Title", "Subtitle"}
+
+    def _justify_body_paragraphs(self, doc):
+        """Set justify alignment on all body paragraphs that contain visible text."""
+        for p in doc.paragraphs:
+            if not p.text.strip():
+                continue
+            style_name = p.style.name if p.style else ""
+            if style_name in self._SKIP_JUSTIFY_STYLES:
+                continue
+            p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
     def determine_partner_count(self, data):
         if data.get("BID_TYPE") == "Single Bidder":
             if self.is_empty_value(data.get("LEAD_PARTNER_NAME", "")):
@@ -328,6 +342,7 @@ class BidDocumentGenerator:
 
         placeholders = {f"{{{{{k}}}}}": v for k, v in data.items()}
         self.replace_in_document(doc, placeholders)
+        self._justify_body_paragraphs(doc)
 
         image_mapping = {k: v for k, v in (image_mapping or {}).items() if v and os.path.exists(v)}
         # master_template_3 names MD signature slots "<P>_MD1_SIG" instead of the upload key "<P>_PARTNER_MD1".
