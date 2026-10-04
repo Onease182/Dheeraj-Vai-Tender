@@ -285,6 +285,28 @@ class BidDocumentGenerator:
                 process_paragraph(p)
         return replacements
 
+    def _compress_empty_paragraphs(self, doc, max_consecutive: int = 2):
+        """Remove runs of more than `max_consecutive` blank paragraphs in the body."""
+        consecutive = 0
+        to_remove = []
+        for p in doc.paragraphs:
+            xml = etree.tostring(p._element).decode()
+            is_sect = "w:sectPr" in xml
+            if is_sect:
+                consecutive = 0
+                continue
+            if p.text.strip():
+                consecutive = 0
+            else:
+                consecutive += 1
+                if consecutive > max_consecutive:
+                    to_remove.append(p)
+        for p in to_remove:
+            try:
+                p._element.getparent().remove(p._element)
+            except Exception:
+                pass
+
     def _fix_header_spacing(self, doc):
         """Ensure all sections have consistent header-from-top distance and top margin."""
         for section in doc.sections:
@@ -352,6 +374,7 @@ class BidDocumentGenerator:
         placeholders = {f"{{{{{k}}}}}": v for k, v in data.items()}
         self.replace_in_document(doc, placeholders)
         self._justify_body_paragraphs(doc)
+        self._compress_empty_paragraphs(doc)
         self._fix_header_spacing(doc)
 
         image_mapping = {k: v for k, v in (image_mapping or {}).items() if v and os.path.exists(v)}
