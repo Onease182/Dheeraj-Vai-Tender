@@ -385,7 +385,7 @@ class BidDocumentGenerator:
             if section.header_distance == 0 or section.header_distance is None:
                 section.header_distance = Inches(0.5)   # 0.5 inch from paper edge to header
             if section.top_margin == 0 or section.top_margin is None:
-                section.top_margin = Inches(1.0)
+                section.top_margin = Inches(0.75)
 
     # Styles that should keep their own alignment and spacing.
     _SKIP_JUSTIFY_STYLES = {"Heading 1", "Heading 2", "Heading 3", "Heading 4", "Title", "Subtitle"}
