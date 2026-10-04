@@ -285,6 +285,21 @@ class BidDocumentGenerator:
                 process_paragraph(p)
         return replacements
 
+    def _compact_signature_tables(self, doc):
+        """Reduce row heights of signature line tables (5 rows: dots/name/title/company/address)
+        so sections with multiple tables don't overflow to a blank second page."""
+        from docx.shared import Inches
+        COMPACT_HEIGHT = Inches(0.22)  # was 0.28–0.40in per row → save ~0.7in per table
+
+        for table in doc.tables:
+            # Only target 5-row signature tables that are very tall (>1.3in total)
+            if len(table.rows) != 5:
+                continue
+            total_h = sum(r.height or 0 for r in table.rows)
+            if total_h > 1_200_000:  # > ~1.3 inch
+                for row in table.rows:
+                    row.height = COMPACT_HEIGHT
+
     def _remove_empty_tables(self, doc):
         """Remove tables whose every cell is empty (image removed, no text left)."""
         for table in list(doc.tables):
@@ -346,7 +361,7 @@ class BidDocumentGenerator:
             pf = p.paragraph_format
             # Only touch paragraphs where spacing is still inherited (None = theme default)
             if pf.space_after is None:
-                pf.space_after = Pt(4)
+                pf.space_after = Pt(2)
             if pf.line_spacing is None:
                 pf.line_spacing = 1.0
                 pf.line_spacing_rule = WD_LINE_SPACING.SINGLE
@@ -407,6 +422,7 @@ class BidDocumentGenerator:
         placeholders = {f"{{{{{k}}}}}": v for k, v in data.items()}
         self.replace_in_document(doc, placeholders)
         self._remove_empty_tables(doc)
+        self._compact_signature_tables(doc)
         self._normalize_paragraph_spacing(doc)
         self._justify_body_paragraphs(doc)
         self._compress_empty_paragraphs(doc)
