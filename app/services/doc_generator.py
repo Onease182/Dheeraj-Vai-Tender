@@ -338,6 +338,25 @@ class BidDocumentGenerator:
                 except Exception:
                     pass
 
+    def _compress_regards_spacing(self, doc):
+        """After 'With Regards', keep only 1 blank paragraph before the signature table."""
+        paras = doc.paragraphs
+        for i, p in enumerate(paras):
+            if p.text.strip().startswith("With Regards"):
+                # Remove extra blank paragraphs after it (keep at most 1)
+                blanks_removed = 0
+                for j in range(i + 1, min(i + 6, len(paras))):
+                    nxt = paras[j]
+                    if nxt.text.strip():
+                        break
+                    if blanks_removed >= 1:
+                        try:
+                            nxt._element.getparent().remove(nxt._element)
+                        except Exception:
+                            pass
+                    else:
+                        blanks_removed += 1
+
     def _compress_empty_paragraphs(self, doc, max_consecutive: int = 2):
         """Remove runs of more than `max_consecutive` blank paragraphs in the body."""
         consecutive = 0
@@ -454,6 +473,7 @@ class BidDocumentGenerator:
         self._compact_signature_tables(doc)
         self._normalize_paragraph_spacing(doc)
         self._justify_body_paragraphs(doc)
+        self._compress_regards_spacing(doc)
         self._compress_empty_paragraphs(doc)
         self._fix_header_spacing(doc)
 
