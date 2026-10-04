@@ -487,12 +487,14 @@ class BidDocumentGenerator:
         self.replace_in_document(doc, placeholders)
         self._remove_empty_tables(doc)
         self._remove_stray_lit_paragraphs(doc)
-        self._compact_signature_tables(doc)
-        self._normalize_paragraph_spacing(doc)
-        self._justify_body_paragraphs(doc)
-        self._compress_regards_spacing(doc)
-        self._compress_empty_paragraphs(doc)
-        self._fix_header_spacing(doc)
+        # All templates are already perfectly formatted — only do cleanup, no reformatting
+        if template_name not in ("master_template_1.docx", "master_template_2.docx", "master_template_3.docx"):
+            self._compact_signature_tables(doc)
+            self._normalize_paragraph_spacing(doc)
+            self._justify_body_paragraphs(doc)
+            self._compress_regards_spacing(doc)
+            self._compress_empty_paragraphs(doc)
+            self._fix_header_spacing(doc)
 
         image_mapping = {k: v for k, v in (image_mapping or {}).items() if v and os.path.exists(v)}
         # master_template_3 names MD signature slots "<P>_MD1_SIG" instead of the upload key "<P>_PARTNER_MD1".
