@@ -350,18 +350,24 @@ class BidDocumentGenerator:
     _SKIP_JUSTIFY_STYLES = {"Heading 1", "Heading 2", "Heading 3", "Heading 4", "Title", "Subtitle"}
 
     def _normalize_paragraph_spacing(self, doc):
-        """Enforce consistent single-spacing on all body paragraphs so sections
-        don't overflow to an extra page due to inherited theme defaults."""
+        """Enforce compact single-spacing on all body paragraphs.
+        Template list items (a)-(p) carry sa=12pt/sb=12pt which causes the
+        Price Bid section to overflow by ~150pt; we clamp everything to 2pt/0pt."""
         from docx.shared import Pt
         from docx.enum.text import WD_LINE_SPACING
+        MAX_SPACE_AFTER_PT = 2
         for p in doc.paragraphs:
             style_name = p.style.name if p.style else ""
             if style_name in self._SKIP_JUSTIFY_STYLES:
                 continue
             pf = p.paragraph_format
-            # Only touch paragraphs where spacing is still inherited (None = theme default)
-            if pf.space_after is None:
-                pf.space_after = Pt(2)
+            # Always enforce: cap space_after and remove space_before
+            sa = pf.space_after
+            if sa is None or (float(sa) / 914400 * 72) > MAX_SPACE_AFTER_PT:
+                pf.space_after = Pt(MAX_SPACE_AFTER_PT)
+            sb = pf.space_before
+            if sb is not None and float(sb) > 0:
+                pf.space_before = Pt(0)
             if pf.line_spacing is None:
                 pf.line_spacing = 1.0
                 pf.line_spacing_rule = WD_LINE_SPACING.SINGLE
