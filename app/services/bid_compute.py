@@ -13,6 +13,11 @@ def with_derived_fields(field_data: dict) -> dict:
     # master_template_3 uses {{<P>_PARTNER_ADDRESS}} where the other templates (and the form) use {{<P>_ADDRESS}}.
     for prefix in ("LEAD", "FIRST", "SECOND"):
         data.setdefault(f"{prefix}_PARTNER_ADDRESS", data.get(f"{prefix}_ADDRESS", ""))
+    # Ensure participation percentages always carry the % symbol.
+    for key in ("L_PER", "F_PER", "S_PER"):
+        val = str(data.get(key, "")).strip()
+        if val and not val.endswith("%"):
+            data[key] = val + "%"
     return data
 
 

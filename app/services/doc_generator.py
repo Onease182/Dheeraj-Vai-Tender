@@ -138,6 +138,13 @@ class BidDocumentGenerator:
                                 self._clear_table_cell(cell)
                                 break
 
+    def _has_page_break(self, paragraph) -> bool:
+        """True if the paragraph contains only a page/section break and no visible text."""
+        if paragraph.text.strip():
+            return False
+        xml = paragraph._element.xml if hasattr(paragraph._element, "xml") else ""
+        return "w:pageBreak" in xml or "w:sectPr" in xml
+
     def remove_partner_blocks(self, doc, partner_prefix):
         paragraphs_to_remove = []
         for paragraph in doc.paragraphs:
@@ -149,6 +156,19 @@ class BidDocumentGenerator:
                 p._element.getparent().remove(p._element)
             except Exception:
                 pass
+
+        # Remove page-break-only paragraphs that are now stranded (empty body after removal).
+        body_paragraphs = doc.paragraphs
+        for i, p in enumerate(body_paragraphs):
+            if not self._has_page_break(p):
+                continue
+            # Stranded if the next non-empty paragraph is another page break or there is none.
+            rest = [q for q in body_paragraphs[i + 1:] if q.text.strip() or self._has_page_break(q)]
+            if not rest or self._has_page_break(rest[0]):
+                try:
+                    p._element.getparent().remove(p._element)
+                except Exception:
+                    pass
 
         for table in doc.tables:
             rows_to_remove = []
@@ -164,6 +184,15 @@ class BidDocumentGenerator:
                 except Exception:
                     pass
 
+    def _replace_in_header_footer(self, hdr_ftr, placeholders):
+        for p in hdr_ftr.paragraphs:
+            self.replace_all_in_paragraph(p, placeholders)
+        for table in hdr_ftr.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for p in cell.paragraphs:
+                        self.replace_all_in_paragraph(p, placeholders)
+
     def replace_in_document(self, doc, placeholders):
         for p in doc.paragraphs:
             self.replace_all_in_paragraph(p, placeholders)
@@ -173,10 +202,8 @@ class BidDocumentGenerator:
                     for p in cell.paragraphs:
                         self.replace_all_in_paragraph(p, placeholders)
         for section in doc.sections:
-            for p in section.header.paragraphs:
-                self.replace_all_in_paragraph(p, placeholders)
-            for p in section.footer.paragraphs:
-                self.replace_all_in_paragraph(p, placeholders)
+            self._replace_in_header_footer(section.header, placeholders)
+            self._replace_in_header_footer(section.footer, placeholders)
 
     def _all_paragraphs(self, doc):
         yield from doc.paragraphs
@@ -185,8 +212,12 @@ class BidDocumentGenerator:
                 for cell in row.cells:
                     yield from cell.paragraphs
         for section in doc.sections:
-            yield from section.header.paragraphs
-            yield from section.footer.paragraphs
+            for hf in (section.header, section.footer):
+                yield from hf.paragraphs
+                for table in hf.tables:
+                    for row in table.rows:
+                        for cell in row.cells:
+                            yield from cell.paragraphs
 
     def unresolved_placeholders(self, doc):
         found = set()
