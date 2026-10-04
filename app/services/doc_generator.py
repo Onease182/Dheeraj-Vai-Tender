@@ -285,6 +285,22 @@ class BidDocumentGenerator:
                 process_paragraph(p)
         return replacements
 
+    def _remove_empty_tables(self, doc):
+        """Remove tables whose every cell is empty (image removed, no text left)."""
+        for table in list(doc.tables):
+            all_empty = all(
+                cell.text.strip() == ""
+                for row in table.rows
+                for cell in row.cells
+            )
+            if all_empty:
+                try:
+                    tbl_parent = table._element.getparent()
+                    if tbl_parent is not None:
+                        tbl_parent.remove(table._element)
+                except Exception:
+                    pass
+
     def _compress_empty_paragraphs(self, doc, max_consecutive: int = 2):
         """Remove runs of more than `max_consecutive` blank paragraphs in the body."""
         consecutive = 0
@@ -373,6 +389,7 @@ class BidDocumentGenerator:
 
         placeholders = {f"{{{{{k}}}}}": v for k, v in data.items()}
         self.replace_in_document(doc, placeholders)
+        self._remove_empty_tables(doc)
         self._justify_body_paragraphs(doc)
         self._compress_empty_paragraphs(doc)
         self._fix_header_spacing(doc)
