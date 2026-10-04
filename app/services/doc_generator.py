@@ -414,14 +414,18 @@ class BidDocumentGenerator:
                 pf.line_spacing_rule = WD_LINE_SPACING.SINGLE
 
     def _justify_body_paragraphs(self, doc):
-        """Set justify alignment on all body paragraphs that contain visible text."""
+        """Set justify alignment on body paragraphs that have no explicit alignment.
+        Paragraphs with explicit CENTER/RIGHT alignment are left untouched."""
         for p in doc.paragraphs:
             if not p.text.strip():
                 continue
             style_name = p.style.name if p.style else ""
             if style_name in self._SKIP_JUSTIFY_STYLES:
                 continue
-            p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+            # Only apply JUSTIFY when the paragraph has no explicit alignment set
+            # (i.e. it inherits from its style). Never override CENTER or RIGHT.
+            if p.paragraph_format.alignment is None:
+                p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
 
     def determine_partner_count(self, data):
         if data.get("BID_TYPE") == "Single Bidder":
