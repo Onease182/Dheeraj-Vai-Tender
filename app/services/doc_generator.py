@@ -331,8 +331,25 @@ class BidDocumentGenerator:
             if section.top_margin == 0 or section.top_margin is None:
                 section.top_margin = Inches(1.0)
 
-    # Heading styles that should keep their own alignment (centered/left as designed).
+    # Styles that should keep their own alignment and spacing.
     _SKIP_JUSTIFY_STYLES = {"Heading 1", "Heading 2", "Heading 3", "Heading 4", "Title", "Subtitle"}
+
+    def _normalize_paragraph_spacing(self, doc):
+        """Enforce consistent single-spacing on all body paragraphs so sections
+        don't overflow to an extra page due to inherited theme defaults."""
+        from docx.shared import Pt
+        from docx.enum.text import WD_LINE_SPACING
+        for p in doc.paragraphs:
+            style_name = p.style.name if p.style else ""
+            if style_name in self._SKIP_JUSTIFY_STYLES:
+                continue
+            pf = p.paragraph_format
+            # Only touch paragraphs where spacing is still inherited (None = theme default)
+            if pf.space_after is None:
+                pf.space_after = Pt(4)
+            if pf.line_spacing is None:
+                pf.line_spacing = 1.0
+                pf.line_spacing_rule = WD_LINE_SPACING.SINGLE
 
     def _justify_body_paragraphs(self, doc):
         """Set justify alignment on all body paragraphs that contain visible text."""
@@ -390,6 +407,7 @@ class BidDocumentGenerator:
         placeholders = {f"{{{{{k}}}}}": v for k, v in data.items()}
         self.replace_in_document(doc, placeholders)
         self._remove_empty_tables(doc)
+        self._normalize_paragraph_spacing(doc)
         self._justify_body_paragraphs(doc)
         self._compress_empty_paragraphs(doc)
         self._fix_header_spacing(doc)
