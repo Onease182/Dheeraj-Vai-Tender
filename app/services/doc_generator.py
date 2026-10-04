@@ -309,9 +309,13 @@ class BidDocumentGenerator:
 
     def _compact_signature_tables(self, doc):
         """Reduce all 5-row signature tables to 0.15in/row (0.75in total) so sections
-        with 2 sig tables + 1 LIT table fit within the 648pt US-Letter content area."""
+        with 2 sig tables + 1 LIT table fit within the 648pt US-Letter content area.
+        Also marks every row with w:cantSplit so Word never breaks the table mid-row
+        across a page boundary."""
         from docx.shared import Inches
+        from lxml import etree
         COMPACT_HEIGHT = Inches(0.15)  # 0.75in total per 5-row sig table
+        W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
         for table in doc.tables:
             if len(table.rows) != 5:
@@ -321,6 +325,15 @@ class BidDocumentGenerator:
             if total_h > 548_640:  # > 0.6 inch
                 for row in table.rows:
                     row.height = COMPACT_HEIGHT
+            # Always prevent row splitting across pages for every 5-row sig table
+            for row in table.rows:
+                trPr = row._tr.find(f"{{{W}}}trPr")
+                if trPr is None:
+                    trPr = etree.SubElement(row._tr, f"{{{W}}}trPr")
+                    row._tr.insert(0, trPr)
+                if trPr.find(f"{{{W}}}cantSplit") is None:
+                    cantSplit = etree.SubElement(trPr, f"{{{W}}}cantSplit")
+                    cantSplit.set(f"{{{W}}}val", "1")
 
     def _remove_empty_tables(self, doc):
         """Remove tables whose every cell is empty (image removed, no text left)."""
