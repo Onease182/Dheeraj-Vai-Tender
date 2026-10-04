@@ -290,12 +290,20 @@ class BidDocumentGenerator:
     def _remove_stray_lit_paragraphs(self, doc):
         """Remove template-artifact paragraphs that contain LIT marker text outside any table.
         The template_3 has a paragraph 'NO PENDING LITIGATIONNO PENDING LITIGATION' directly
-        after each LIT table — it should not appear in the generated document."""
-        for p in list(doc.paragraphs):
-            txt = p.text.strip()
-            if txt in self._LIT_STRAY_MARKERS:
+        after each LIT table — it should not appear in the generated document.
+        NOTE: p.text is empty for these paragraphs because their text lives inside inline SDTs;
+        we must use raw XML findall to read all w:t elements."""
+        from lxml import etree
+        W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+        body = doc.element.body
+        for child in list(body):
+            if etree.QName(child).localname != "p":
+                continue
+            all_t = child.findall(f".//{{{W}}}t")
+            txt = "".join(t.text or "" for t in all_t).strip()
+            if txt.startswith("NO PENDING LITIGATION"):
                 try:
-                    p._element.getparent().remove(p._element)
+                    body.remove(child)
                 except Exception:
                     pass
 
