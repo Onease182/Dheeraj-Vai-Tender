@@ -285,18 +285,32 @@ class BidDocumentGenerator:
                 process_paragraph(p)
         return replacements
 
+    _LIT_STRAY_MARKERS = {"NO PENDING LITIGATIONNO PENDING LITIGATION", "NO PENDING LITIGATION"}
+
+    def _remove_stray_lit_paragraphs(self, doc):
+        """Remove template-artifact paragraphs that contain LIT marker text outside any table.
+        The template_3 has a paragraph 'NO PENDING LITIGATIONNO PENDING LITIGATION' directly
+        after each LIT table — it should not appear in the generated document."""
+        for p in list(doc.paragraphs):
+            txt = p.text.strip()
+            if txt in self._LIT_STRAY_MARKERS:
+                try:
+                    p._element.getparent().remove(p._element)
+                except Exception:
+                    pass
+
     def _compact_signature_tables(self, doc):
-        """Reduce row heights of signature line tables (5 rows: dots/name/title/company/address)
-        so sections with multiple tables don't overflow to a blank second page."""
+        """Reduce all 5-row signature tables to 0.15in/row (0.75in total) so sections
+        with 2 sig tables + 1 LIT table fit within the 648pt US-Letter content area."""
         from docx.shared import Inches
-        COMPACT_HEIGHT = Inches(0.22)  # was 0.28–0.40in per row → save ~0.7in per table
+        COMPACT_HEIGHT = Inches(0.15)  # 0.75in total per 5-row sig table
 
         for table in doc.tables:
-            # Only target 5-row signature tables that are very tall (>1.3in total)
             if len(table.rows) != 5:
                 continue
             total_h = sum(r.height or 0 for r in table.rows)
-            if total_h > 1_200_000:  # > ~1.3 inch
+            # Target any signature table > 0.6in (catches 1.10in and larger)
+            if total_h > 548_640:  # > 0.6 inch
                 for row in table.rows:
                     row.height = COMPACT_HEIGHT
 
@@ -428,6 +442,7 @@ class BidDocumentGenerator:
         placeholders = {f"{{{{{k}}}}}": v for k, v in data.items()}
         self.replace_in_document(doc, placeholders)
         self._remove_empty_tables(doc)
+        self._remove_stray_lit_paragraphs(doc)
         self._compact_signature_tables(doc)
         self._normalize_paragraph_spacing(doc)
         self._justify_body_paragraphs(doc)
