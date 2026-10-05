@@ -371,6 +371,17 @@ def get_qr_code_info(db: Session = Depends(get_db)):
     return {"qr_code_configured": bool(row.qr_code_path), "updated_at": row.updated_at}
 
 
+@router.get("/settings/qr-code/image")
+def get_qr_code_image(db: Session = Depends(get_db)):
+    row = _get_settings_row(db)
+    if not row.qr_code_path:
+        raise HTTPException(status_code=404, detail="QR code not configured")
+    path = Path(settings.storage_root) / row.qr_code_path
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="QR code file not found")
+    return FileResponse(str(path), media_type="image/png")
+
+
 @router.put("/settings/qr-code")
 def upload_qr_code(file: UploadFile = File(...), db: Session = Depends(get_db)):
     row = _get_settings_row(db)
