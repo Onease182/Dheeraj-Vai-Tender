@@ -31,6 +31,9 @@ class User(Base):
     password_reset_token: Mapped[str] = mapped_column(String(64), nullable=True)
     password_reset_expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
 
+    pending_email: Mapped[str] = mapped_column(String(255), nullable=True)
+    pending_email_token: Mapped[str] = mapped_column(String(64), nullable=True)
+
     # Lead Partner is always available. These gate First/Second Partner
     # tabs and signature/stamp uploads — off by default for new accounts,
     # an admin grants them per client.

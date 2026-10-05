@@ -6,18 +6,26 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_verified_active_user
 from app.core.security import create_access_token, hash_password, verify_password
 from app.models.user import User
 from app.schemas.auth import (
+    ChangeEmailRequest,
+    ChangePasswordRequest,
     ForgotPasswordRequest,
     RegisterRequest,
     ResetPasswordRequest,
     TokenResponse,
     UserResponse,
+    VerifyEmailChangeRequest,
     VerifyEmailRequest,
 )
-from app.services.email import send_password_reset_email, send_verification_email
+from app.services.email import (
+    send_email_change_notice_old,
+    send_email_change_verification,
+    send_password_reset_email,
+    send_verification_email,
+)
 
 PASSWORD_RESET_TOKEN_MINUTES = 60
 
@@ -108,3 +116,56 @@ def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db))
     db.commit()
 
     return TokenResponse(access_token=create_access_token(user.id))
+
+
+@router.put("/me/password")
+def change_password(
+    payload: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not verify_password(payload.current_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Current password is incorrect.")
+    if len(payload.new_password) < 8:
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters.")
+    current_user.hashed_password = hash_password(payload.new_password)
+    db.commit()
+    return {"detail": "Password updated successfully."}
+
+
+@router.put("/me/email")
+def request_email_change(
+    payload: ChangeEmailRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not verify_password(payload.password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Password is incorrect.")
+    if payload.email == current_user.email:
+        raise HTTPException(status_code=400, detail="New email is the same as the current one.")
+    existing = db.query(User).filter(User.email == payload.email).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already in use.")
+    token = secrets.token_urlsafe(32)
+    current_user.pending_email = payload.email
+    current_user.pending_email_token = token
+    db.commit()
+    send_email_change_verification(payload.email, token)
+    return {"detail": "Verification email sent to your new address."}
+
+
+@router.post("/verify-email-change", response_model=UserResponse)
+def verify_email_change(payload: VerifyEmailChangeRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.pending_email_token == payload.token).first()
+    if not user or not user.pending_email:
+        raise HTTPException(status_code=400, detail="Invalid or expired link.")
+    old_email = user.email
+    new_email = user.pending_email
+    user.email = new_email
+    user.pending_email = None
+    user.pending_email_token = None
+    user.email_verified = True
+    db.commit()
+    db.refresh(user)
+    send_email_change_notice_old(old_email, new_email)
+    return user

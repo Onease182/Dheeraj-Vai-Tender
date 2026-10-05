@@ -38,7 +38,7 @@ from app.services import storage
 from app.services.bid_compute import resolve_authorized_signature_key, with_derived_fields
 from app.services.billing import verify_invoice
 from app.services.doc_generator import BidDocumentGenerator
-from app.services.email import send_password_reset_by_admin_email
+from app.services.email import send_email_change_notice_admin, send_password_reset_by_admin_email
 from app.services.pdf_export import split_and_compress
 from app.services.validation import determine_partner_count, validate_bid
 
@@ -117,6 +117,32 @@ def reset_user_password(user_id: str, payload: AdminResetPasswordRequest, db: Se
     send_password_reset_by_admin_email(user.email, new_password)
 
     return AdminResetPasswordResponse(new_password=new_password)
+
+
+@router.put("/users/{user_id}/email", response_model=AdminUserOut)
+def change_user_email(user_id: str, payload: dict, db: Session = Depends(get_db)):
+    from pydantic import EmailStr, TypeAdapter
+    new_email = payload.get("email", "").strip()
+    try:
+        TypeAdapter(EmailStr).validate_python(new_email)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid email address.")
+    user = _get_user(db, user_id)
+    existing = db.query(User).filter(User.email == new_email).first()
+    if existing and existing.id != user_id:
+        raise HTTPException(status_code=400, detail="Email already in use by another account.")
+    old_email = user.email
+    if old_email == new_email:
+        return AdminUserOut.model_validate(user)
+    user.email = new_email
+    user.pending_email = None
+    user.pending_email_token = None
+    db.commit()
+    db.refresh(user)
+    send_email_change_notice_admin(old_email, new_email)
+    out = AdminUserOut.model_validate(user)
+    out.generation_count = 0
+    return out
 
 
 @router.delete("/users/{user_id}", status_code=204)
