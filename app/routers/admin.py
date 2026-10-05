@@ -119,6 +119,25 @@ def reset_user_password(user_id: str, payload: AdminResetPasswordRequest, db: Se
     return AdminResetPasswordResponse(new_password=new_password)
 
 
+@router.delete("/users/{user_id}", status_code=204)
+def delete_user(user_id: str, db: Session = Depends(get_db)):
+    user = _get_user(db, user_id)
+    if user.is_admin:
+        raise HTTPException(status_code=400, detail="Cannot delete an admin account")
+    # Cascade: generated docs, drafts, profiles, invoices
+    db.query(GeneratedDocument).filter(GeneratedDocument.user_id == user_id).delete()
+    db.query(Invoice).filter(Invoice.user_id == user_id).delete()
+    for draft in db.query(Draft).filter(Draft.user_id == user_id).all():
+        db.query(DraftImage).filter(DraftImage.draft_id == draft.id).delete()
+        db.query(DraftSessionDoc).filter(DraftSessionDoc.draft_id == draft.id).delete()
+        db.delete(draft)
+    db.query(PartnerProfile).filter(PartnerProfile.user_id == user_id).delete()
+    storage.delete_dir(f"drafts/{user_id}")
+    storage.delete_dir(f"generated/{user_id}")
+    db.delete(user)
+    db.commit()
+
+
 @router.get("/users/{user_id}/drafts", response_model=list[AdminDraftSummary])
 def list_user_drafts(user_id: str, db: Session = Depends(get_db)):
     _get_user(db, user_id)
