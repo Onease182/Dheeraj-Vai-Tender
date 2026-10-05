@@ -7,6 +7,7 @@ from app.core.constants import ATTACHMENT_CATEGORIES, PARTNER_ROLES, role_of_pre
 from app.core.db import get_db
 from app.core.deps import get_verified_active_user
 from app.models.draft import Draft, DraftImage, DraftSessionDoc
+from app.models.generated_document import GeneratedDocument
 from app.models.user import User
 from app.schemas.draft import DraftCreate, DraftOut, DraftSummary, DraftUpdate
 from app.services import storage
@@ -66,6 +67,7 @@ def update_draft(
 def delete_draft(draft_id: str, db: Session = Depends(get_db), user: User = Depends(get_verified_active_user)):
     draft = _get_owned_draft(db, draft_id, user)
     storage.delete_dir(f"drafts/{draft.id}")
+    db.query(GeneratedDocument).filter(GeneratedDocument.draft_id == draft_id).delete()
     db.delete(draft)
     db.commit()
 
